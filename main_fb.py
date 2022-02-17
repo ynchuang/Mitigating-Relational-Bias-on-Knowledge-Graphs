@@ -32,8 +32,9 @@ def test(test_triplets, model, test_graph, all_triplets):
 
     entity_embedding = model(test_graph.entity, test_graph.edge_index, test_graph.edge_type, test_graph.edge_norm)
     mrr = calc_mrr(entity_embedding, model.relation_embedding, test_triplets, all_triplets, hits=[1, 3, 10])
-    #with open("log/fb_layer_" + {str(args.n_layer)} + "_link_"+str(args.regularization), 'a') as f:
-    with open(f"log/fb_layer_{args.n_layer}_link_{args.regularization}", 'a') as f:
+    #with open("log/fb_layer_" + {str(args.nlayer)} + "_link_"+str(args.regularization), 'a') as f:
+    with open(f"log/fb_layer_{args.nlayer}_mu_{args.a}_reg_{args.regularization}", 'a') as f:
+        f.write("Model: {:d}\n".format(args.b1))
         f.write("MRR (filtered): {:.6f}\n".format(mrr))
 
     return mrr
@@ -41,12 +42,10 @@ def test(test_triplets, model, test_graph, all_triplets):
 def fair_test(fair_triplets, model, test_graph, fair_all_triplets):
     entity_embedding = model(test_graph.entity, test_graph.edge_index, test_graph.edge_type, test_graph.edge_norm)
     p1, e1, p2, e2 = calc_fair(entity_embedding, model.relation_embedding, fair_triplets, fair_all_triplets, hits=[1, 3, 10])
-    #with open("log/fb_layer_" + {str(args.n_layer)} + "_link_"+str(args.regularization), 'a') as f:
-    with open(f"log/fb_layer_{args.n_layer}_link_{args.regularization}", 'a') as f:
+    #with open("log/fb_layer_" + {str(args.nlayer)} + "_link_"+str(args.regularization), 'a') as f:
+    with open(f"log/fb_layer_{args.nlayer}_mu_{args.a}_reg_{args.regularization}", 'a') as f:
         f.write("Task1: parity: {:.6f} | equality: {:.6f}\n".format(p1, e1))
         f.write("Task2: parity: {:.6f} | equality: {:.6f}\n".format(p2, e2))
-
-
 
 def main(args):
 
@@ -55,8 +54,9 @@ def main(args):
         torch.cuda.set_device(args.gpu)
 
     best_mrr = 0
-    _train = 1
-    evalu = 1
+    _train = int(args.tran)
+    evalu = int(args.eval)
+    infer = int(args.infer)
 
     entity2id, relation2id, train_triplets, valid_triplets, test_triplets, fair_triplets = load_data('./data/FB15k-237')
     all_triplets = torch.LongTensor(np.concatenate((train_triplets, valid_triplets, test_triplets)))
@@ -67,7 +67,7 @@ def main(args):
     test_triplets = torch.LongTensor(test_triplets)
     fair_triplets = torch.LongTensor(fair_triplets)
 
-    model = RGCN(len(entity2id), len(relation2id), num_bases=args.n_bases, dropout=args.dropout, a = args.a, b1 = args.b1, b2 = args.b2, n_layer = args.n_layer)
+    model = RGCN(len(entity2id), len(relation2id), num_bases=args.n_bases, dropout=args.dropout, a = args.a, b1 = args.b1, b2 = args.b2, n_layer = args.nlayer)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     print(model)
@@ -76,7 +76,7 @@ def main(args):
         model.cuda()
 
     if _train:
-        early_stopping = EarlyStopping(patience=10, verbose=True)
+        early_stopping = EarlyStopping(patience=10, verbose=True, path=f'best_mrr_model_fb_reg{args.regularization}_mu{args.a}_layer{args.nlayer}.pth')
 
         for epoch in trange(1, (args.n_epochs + 1), desc='Epochs', position=0):
 
@@ -99,7 +99,9 @@ def main(args):
 
                 model.eval()
                 valid_mrr = valid(valid_triplets, model, test_graph, all_triplets)
-                early_stopping(loss.item(),  model)
+                #early_stopping(loss.item(),  model, path='best_mrr_model_fb_reg{}_mu{}_layer{}.pth'.format(args.regularization, args.a, args.nlayer))
+                #early_stopping(loss.item(),  model)
+                early_stopping(valid_mrr,  model)
 
                 if early_stopping.early_stop:
                     print("Early stopping")
@@ -113,18 +115,31 @@ def main(args):
 
         model.eval()
 
-        checkpoint = torch.load('best_mrr_model_fb.pth')
+        checkpoint = torch.load('best_mrr_model_fb_reg{}_mu{}_layer{}.pth'.format(args.regularization, args.a, args.nlayer))
         model.load_state_dict(checkpoint)#['state_dict'])
 
         test(test_triplets, model, test_graph, all_triplets)
         fair_test(fair_triplets, model, test_graph, fair_all_triplets)
+
+    if infer:
+        if use_cuda:
+             model.cpu()
+
+        model.eval()
+
+        checkpoint = torch.load('weight/best_mrr_model_fb_reg{}_mu{}_layer{}.pth'.format(args.regularization, args.a, args.nlayer))
+        model.load_state_dict(checkpoint)#['state_dict'])
+
+        test(test_triplets, model, test_graph, all_triplets)
+        fair_test(fair_triplets, model, test_graph, fair_all_triplets)
+
 
 if __name__ == '__main__':
     SEED = 2021
     torch.manual_seed(SEED)
     torch.cuda.manual_seed(SEED)
 
-    parser = argparse.ArgumentParser(description='RGCN')
+    parser = argparse.ArgumentParser(description='Fair-KGNN')
 
     parser.add_argument("--graph-batch-size", type=int, default=30000)
     parser.add_argument("--graph-split-size", type=float, default=0.5)
@@ -132,7 +147,7 @@ if __name__ == '__main__':
     parser.add_argument("--n-epochs", type=int, default=3000)
     parser.add_argument("--evaluate-every", type=int, default=200)
 
-    parser.add_argument("--dropout", type=float, default=0.0)
+    parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--gpu", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument("--n-bases", type=int, default=4)
@@ -140,9 +155,12 @@ if __name__ == '__main__':
     parser.add_argument("--regularization", type=float, default=1e-2)
     parser.add_argument("--grad-norm", type=float, default=1.0)
     parser.add_argument("--a", type=float, default=1.0)
-    parser.add_argument("--b1", type=float, default=1.0)
+    parser.add_argument("--b1", type=int, default=1)
     parser.add_argument("--b2", type=float, default=1.0)
-    parser.add_argument("--n-layer", type=int, default=2)
+    parser.add_argument("--nlayer", type=int, default=2)
+    parser.add_argument("--tran", type=int, default=1)
+    parser.add_argument("--eval", type=int, default=1)
+    parser.add_argument("--infer", type=int, default=0)
 
     args = parser.parse_args()
     print(args)

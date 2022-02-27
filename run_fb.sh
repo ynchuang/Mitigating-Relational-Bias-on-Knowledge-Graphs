@@ -1,7 +1,9 @@
-# Inference Mode on: INFER=1
-TRAIN=1
-EVAL=1
-INFER=0
+# Inference Mode on: INFER=1; else 0
+# Training Mode on: TRAIN=1 and EVAL=1; else 0
+
+TRAIN=0
+EVAL=0
+INFER=1
 for i in 0.05
 do
 for j in 0.7

@@ -1,0 +1,5 @@
+Model: 1
+MRR (filtered): 0.174170
+Task1: parity: 0.016467 | equality: 0.011540
+Task2: parity: 0.024049 | equality: 0.158921
+FB_2_layer

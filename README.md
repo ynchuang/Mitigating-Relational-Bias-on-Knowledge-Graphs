@@ -1,7 +1,7 @@
 # Mitigating-Relational-Bias-on-Knowledge-Graphs
 
 ## 1. Introduction
-This github is for the review of KDD 2022.
+This github is for the review of TPAMI.
 
 ## 2 Developed Environment
 - Please follow the setting in requirement.txt

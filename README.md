@@ -1,4 +1,4 @@
-# Mitigating-Relational-Bias-on-Knowledge-Graphs
+# Mitigating Relational Bias on Knowledge Graphs
 
 ## 1. Introduction
 This github is for the review of TPAMI.
